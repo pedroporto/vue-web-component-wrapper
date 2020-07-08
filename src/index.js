@@ -9,7 +9,15 @@ import {
   convertAttributeValue
 } from './utils.js'
 
-export default function wrap (Vue, Component) {
+/** @typedef {object} Options
+ * @prop {boolean} [useShadowDOM = true]
+ */
+
+/**
+ * @param {Options} options
+ */
+export default function wrap (Vue, Component, options = {}) {
+  const { useShadowDOM = false } = options
   const isAsync = typeof Component === 'function' && !Component.cid
   let isInitialized = false
   let hyphenatedPropsList
@@ -80,13 +88,13 @@ export default function wrap (Vue, Component) {
 
   class CustomElement extends HTMLElement {
     constructor () {
-      const self = super()
-      self.attachShadow({ mode: 'open' })
+      super()
+      if (useShadowDOM) this.attachShadow({ mode: 'open' })
 
-      const wrapper = self._wrapper = new Vue({
+      const wrapper = this._wrapper = new Vue({
         name: 'shadow-root',
-        customElement: self,
-        shadowRoot: self.shadowRoot,
+        customElement: this,
+        shadowRoot: this.shadowRoot,
         data () {
           return {
             props: {},
@@ -106,8 +114,8 @@ export default function wrap (Vue, Component) {
         let hasChildrenChange = false
         for (let i = 0; i < mutations.length; i++) {
           const m = mutations[i]
-          if (isInitialized && m.type === 'attributes' && m.target === self) {
-            syncAttribute(self, m.attributeName)
+          if (isInitialized && m.type === 'attributes' && m.target === this) {
+            syncAttribute(this, m.attributeName)
           } else {
             hasChildrenChange = true
           }
@@ -115,11 +123,11 @@ export default function wrap (Vue, Component) {
         if (hasChildrenChange) {
           wrapper.slotChildren = Object.freeze(toVNodes(
             wrapper.$createElement,
-            self.childNodes
+            this.childNodes
           ))
         }
       })
-      observer.observe(self, {
+      observer.observe(this, {
         childList: true,
         subtree: true,
         characterData: true,
@@ -160,7 +168,9 @@ export default function wrap (Vue, Component) {
           this.childNodes
         ))
         wrapper.$mount()
-        this.shadowRoot.appendChild(wrapper.$el)
+        // render element to DOM
+        if (useShadowDOM) this.shadowRoot.appendChild(wrapper.$el)
+        else this.appendChild(wrapper.$el)
       } else {
         callHooks(this.vueComponent, 'activated')
       }
